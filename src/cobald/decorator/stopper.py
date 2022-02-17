@@ -9,7 +9,7 @@ class Stopper(PoolDecorator):
     """
     Decorator that sets the demand to 0 if there are no pending jobs on the partition
 
-    :param target: the pool on which changes are standardised
+    :param target: the pool
     :param granularity: granularity of ``target.demand``
     :param partition: partition that is checked for pending jobs
     :param interval: interval in seconds between checks of ``partition``
@@ -35,13 +35,9 @@ class Stopper(PoolDecorator):
             self.target.demand = self._demand
     
     def _condition_slurm(self, value):
-        """Check every `interval` seconds for pending jobs on `partition`, return `value` if there are pending jobs, otherwise return 0"""
-        time_delta = (datetime.now() - self.test_time).total_seconds()
-        if time_delta >= self.interval:
-            output, error = subprocess.Popen(f"squeue -p {self.partition} -t pending -h | wc -l", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-            n_pend_jobs = output.decode('ascii').strip()
-            self.test_time = datetime.now()
-            if n_pend_jobs == '0':
+        """Check every `interval` seconds for pending jobs on `partition`, return `value` if there are pending jobs, otherwise return 0. If the interval has not passed, the last status is retained"""
+        if self._check_interval():
+            if self._check_slurm() == '0':
                 self.is_stopped = True
                 return 0
             else:
@@ -52,6 +48,22 @@ class Stopper(PoolDecorator):
                 return 0
             else:
                 return value
+
+    def _check_slurm(self):
+        """Return the number of pending jobs on `partition`"""
+        output, error = subprocess.Popen(f"squeue -p {self.partition} -t pending -h | wc -l", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        n_pend_jobs = output.decode('ascii').strip()
+        return n_pend_jobs
+    
+    def _check_interval(self):
+        """Check if the interval for getting the number of pending jobs has passed"""
+        time_delta = (datetime.now() - self.test_time).total_seconds()
+        if time_delta >= self.interval:
+            self.test_time = datetime.now()
+            return True
+        else:
+            return False
+        
 
     def __init__(
         self,
