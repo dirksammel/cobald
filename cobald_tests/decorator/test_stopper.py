@@ -4,8 +4,6 @@ from ..mock.pool import FullMockPool
 
 from cobald.decorator.stopper import Stopper
 
-from unittest.mock import patch
-
 class TestStopper(object):
 
     def test_init_enforcement(self):
@@ -19,32 +17,22 @@ class TestStopper(object):
         with pytest.raises(ValueError):
             Stopper(pool)
 
-    def test_idle(self):
-        pool = FullMockPool()
-        stopper = Stopper(pool, partition='test')
-
-        with patch('cobald.decorator.stopper.Stopper._check_interval', return_value = False) as check_interval_function:
-            stopper.is_stopped = True
-            assert stopper._condition_slurm(20) == 0
-            stopper.is_stopped = False
-            assert stopper._condition_slurm(20) == 20
-
-    def test_check_with_pending(self):
+            
+    def test_running(self):
         pool = FullMockPool()
         stopper = Stopper(pool, partition='test')
         
-        with patch('cobald.decorator.stopper.Stopper._check_interval', return_value = True) as check_interval_function:
-            with patch('cobald.decorator.stopper.Stopper._check_slurm', return_value = '5') as check_slurm_function:
-                for value in (0, 1, 5, 10, 1000):
-                    assert stopper._condition_slurm(value) == value
-                    assert stopper.is_stopped == False        
+        for pend_jobs in (2, 7, 150, 5000):
+            stopper.n_pend_jobs = pend_jobs
+            for value in (0, 1, 5, 10, 1000):
+                assert stopper._condition_slurm(value) == value
 
-    def test_check_without_pending(self):
+    def test_idle(self):
         pool = FullMockPool()
         stopper = Stopper(pool, partition='test')
+        
+        stopper.n_pend_jobs = 0
 
-        with patch('cobald.decorator.stopper.Stopper._check_interval', return_value = True) as check_interval_function:
-            with patch('cobald.decorator.stopper.Stopper._check_slurm', return_value = '0') as check_slurm_function:
-                for value in (0, 1, 5, 10, 1000):
-                    assert stopper._condition_slurm(value) == 0
-                    assert stopper.is_stopped == True
+        for value in (0, 1, 5, 10, 1000):
+            assert stopper._condition_slurm(value) == 0
+

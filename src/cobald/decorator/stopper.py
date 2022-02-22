@@ -2,9 +2,12 @@ from cobald.interfaces import Pool, PoolDecorator
 
 from ..utility import enforce
 
-from datetime import datetime
 import subprocess
+import asyncio
 
+from cobald.daemon import service
+
+@service(flavour=asyncio)
 class Stopper(PoolDecorator):
     """
     Decorator that sets the demand to 0 if there are no pending jobs on the partition
@@ -35,35 +38,33 @@ class Stopper(PoolDecorator):
             self.target.demand = self._demand
     
     def _condition_slurm(self, value):
-        """Check every `interval` seconds for pending jobs on `partition`, return `value` if there are pending jobs, otherwise return 0. If the interval has not passed, the last status is retained"""
-        if self._check_interval():
-            if self._check_slurm() == '0':
-                self.is_stopped = True
-                return 0
-            else:
-                self.is_stopped = False
-                return value
+        """Set demand to zero if there are no pending jobs, otherwise pass `value`"""
+        if self.n_pend_jobs == 0:
+            return 0
         else:
-            if self.is_stopped:
-                return 0
-            else:
-                return value
+            return value
 
-    def _check_slurm(self):
-        """Return the number of pending jobs on `partition`"""
-        output, error = subprocess.Popen(f"squeue -p {self.partition} -t pending -h | wc -l", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        n_pend_jobs = output.decode('ascii').strip()
-        return n_pend_jobs
-    
-    def _check_interval(self):
-        """Check if the interval for getting the number of pending jobs has passed"""
-        time_delta = (datetime.now() - self.test_time).total_seconds()
-        if time_delta >= self.interval:
-            self.test_time = datetime.now()
-            return True
-        else:
-            return False
-        
+    async def run(self):
+        """Retrieve the number of pending jobs on `partition`"""
+        while True:
+            proc = subprocess.Popen(f"squeue -p {self.partition} -t pending -h | wc -l",
+                                    shell=True,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            self.n_pend_jobs = int(stdout.decode('ascii').strip())
+            await asyncio.sleep(self.interval)
+
+    # async def run(self):
+    #     """Retrieve the number of pending jobs on `partition`"""
+    #     while True:
+    #         proc = await asyncio.create_subprocess_shell(
+    #             f"squeue -p {self.partition} -t pending -h | wc -l",
+    #             stdout=asyncio.subprocess.PIPE, 
+    #             stderr=asyncio.subprocess.PIPE)
+    #         stdout, stderr = await proc.communicate()
+    #         self.n_pend_jobs = int(stdout.decode('ascii').strip())
+    #         await asyncio.sleep(self.interval)
 
     def __init__(
         self,
@@ -79,6 +80,5 @@ class Stopper(PoolDecorator):
         self._demand = target.demand
         self.granularity = granularity
         self.partition = partition
-        self.test_time = datetime.now()
         self.interval = interval
-        self.is_stopped = True
+        self.n_pend_jobs = 0
