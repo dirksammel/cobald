@@ -43,7 +43,7 @@ class Stopper(PoolDecorator):
         """Retrieve the number of pending jobs on `partition`"""
         while True:
             proc = subprocess.Popen(
-                f"squeue -p {self.partition} -t pending -h | wc -l",
+                f"squeue -p {self.partition} -t pending -h | grep -v Dependency | wc -l",
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
