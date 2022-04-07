@@ -14,13 +14,13 @@ class Stopper(PoolDecorator):
     Decorator that sets demand to 0 if the partition has no pending jobs
 
     :param target: the pool
-    :param partition: partition that is checked for pending jobs
-    :param interval: interval in seconds between checks of ``partition``
+    :param script: script that checks for pending jobs on the partition
+    :param interval: interval in seconds between execution of the script
 
     If there are pending jobs on the partition, the demand is not modified.
     The demand is set to 0 as long as no pending jobs are detected.
 
-    The default interval is 300 (5 minutes). The partition has to be specified.
+    The default interval is 300 (5 minutes). The script has to be specified.
     """
 
     @property
@@ -40,16 +40,17 @@ class Stopper(PoolDecorator):
             return value
 
     async def run(self):
-        """Retrieve the number of pending jobs on `partition`"""
+        """Retrieve the number of pending jobs"""
         while True:
             proc = subprocess.Popen(
-                f"squeue -p {self.partition} -t pending -h | grep -v Dependency | wc -l",
+                f"./{self.script}",
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
             stdout, stderr = proc.communicate()
             self.n_pend_jobs = int(stdout.decode("ascii").strip())
+            print(self.n_pend_jobs)
             await asyncio.sleep(self.interval)
 
     # async def run(self):
@@ -67,13 +68,13 @@ class Stopper(PoolDecorator):
     def __init__(
         self,
         target: Pool,
-        partition: str = "",
+        script: str = "",
         interval: int = 300,
     ):
         super().__init__(target)
         enforce(interval > 0, ValueError("interval must be positive"))
-        enforce(partition != "", ValueError("partition must be specified"))
+        enforce(script != "", ValueError("script must be specified"))
         self._demand = target.demand
-        self.partition = partition
         self.interval = interval
         self.n_pend_jobs = 0
+        self.script = script
