@@ -2,7 +2,6 @@ from cobald.interfaces import Pool, PoolDecorator
 
 from ..utility import enforce
 
-import subprocess
 import asyncio
 
 from cobald.daemon import service
