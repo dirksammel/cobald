@@ -42,28 +42,14 @@ class Stopper(PoolDecorator):
     async def run(self):
         """Retrieve the number of pending jobs"""
         while True:
-            proc = subprocess.Popen(
-                f"./{self.script}",
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+            proc = await asyncio.create_subprocess_shell(
+                f". {self.script}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = proc.communicate()
+            stdout, stderr = await proc.communicate()
             self.n_pend_jobs = int(stdout.decode("ascii").strip())
-            print(self.n_pend_jobs)
             await asyncio.sleep(self.interval)
-
-    # async def run(self):
-    #     """Retrieve the number of pending jobs on `partition`"""
-    #     while True:
-    #         proc = await asyncio.create_subprocess_shell(
-    #             f"squeue -p {self.partition} -t pending -h | wc -l",
-    #             stdout=asyncio.subprocess.PIPE,
-    #             stderr=asyncio.subprocess.PIPE,
-    #         )
-    #         stdout, stderr = await proc.communicate()
-    #         self.n_pend_jobs = int(stdout.decode("ascii").strip())
-    #         await asyncio.sleep(self.interval)
 
     def __init__(
         self,
